@@ -1,0 +1,30 @@
+name: build and push base image
+
+on:
+  push:
+    branches:    
+      - build-test
+  workflow_dispatch:
+
+jobs:
+  build_deb_packages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1       
+      - name: Build deb packages 
+        run: |
+            make all-bitcoin_regtest BASE_IMAGE=debian:11
+      - name: Release deb packages
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          body: "TEST - Blockbook and bitcoind in regtest mode for testing"
+          files: |
+            ./build/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
