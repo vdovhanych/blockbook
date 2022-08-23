@@ -90,6 +90,8 @@ command: `make NO_CACHE=true all-bitcoin`.
 
 `PORTABLE`: By default, the RocksDB binaries shipped with Blockbook are optimized for the platform you're compiling on (-march=native or the equivalent). If you want to build a portable binary, use `make PORTABLE=1 all-bitcoin`.
 
+`PLATFORM`: Builds the Docker images and the packages for `linux/amd64` or `linux/arm64` instead of the host. Example: `make PORTABLE=1 BASE_IMAGE=debian:12 PLATFORM=linux/arm64 all-bitcoin`. A foreign platform needs QEMU binfmt registered (`docker run --privileged --rm tonistiigi/binfmt --install arm64`). `all-<coin>` deletes `build/*.deb` before packaging, so a second architecture in the same directory has to be `make PLATFORM=linux/arm64 build-images deb-<coin>` after the first `all-<coin>` finishes. Coin backends that publish an arm64 archive select it from `backend.platforms.arm64` when the build container's `GOARCH` is `arm64`.
+
 `BB_BUILD_ENV`: Selects which environment the package is generated for. Defaults to `dev`. Accepted values are `dev`
 and `prod`. It selects the active RPC URL override family, and in a `dev` build it also merges each coin's
 `blockbook.block_chain.additional_params_dev` block over `additional_params` (see

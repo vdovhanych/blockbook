@@ -9,12 +9,17 @@ ARGS ?=
 
 # JEMALLOC is set by the image build arg. The static archive goes in by path because cgo's linker-flag
 # allowlist rejects -l:libjemalloc_pic.a; gcc resolves the multiarch directory.
+# Pure-Go test binaries do not import cgo, so cmd/link stays on the internal linker. On arm64
+# the jemalloc archive then leaves R_AARCH64_CALL26 relocations to malloc and free, which that
+# linker rejects (unknown symbol malloc in callarm64). External linking resolves them with gcc,
+# the same way the blockbook binary already links.
 ifneq ($(JEMALLOC),0)
 JEMALLOC_LIB := $(shell gcc -print-file-name=libjemalloc_pic.a)
 ifeq ($(JEMALLOC_LIB),libjemalloc_pic.a)
 $(error libjemalloc_pic.a not found; install libjemalloc-dev or build the image with JEMALLOC=0)
 endif
 export CGO_LDFLAGS := $(CGO_LDFLAGS) $(JEMALLOC_LIB)
+TEST_LDFLAGS := -linkmode=external
 endif
 
 all: build tools
@@ -34,20 +39,20 @@ tools:
 	chown $(PACKAGER) /out/{ldb,sst_dump}
 
 test: prepare-sources
-	cd $(BLOCKBOOK_SRC) && go test -tags 'unittest' `go list ./... | grep -vP '^github.com/trezor/blockbook/(contrib|tests)'` $(ARGS)
+	cd $(BLOCKBOOK_SRC) && go test -tags 'unittest' -ldflags="$(TEST_LDFLAGS)" `go list ./... | grep -vP '^github.com/trezor/blockbook/(contrib|tests)'` $(ARGS)
 
 test-integration: prepare-sources
-	cd $(BLOCKBOOK_SRC) && go test -tags 'integration' `go list github.com/trezor/blockbook/tests/...` -run 'TestIntegration/.*/(rpc|sync)' -timeout 30m $(ARGS)
+	cd $(BLOCKBOOK_SRC) && go test -tags 'integration' -ldflags="$(TEST_LDFLAGS)" `go list github.com/trezor/blockbook/tests/...` -run 'TestIntegration/.*/(rpc|sync)' -timeout 30m $(ARGS)
 
 test-e2e: prepare-sources
 	@echo "Go API e2e tests were removed. Run contrib/tests/run-openapi-tests.sh from the repository root."
 	@false
 
 test-connectivity: prepare-sources
-	cd $(BLOCKBOOK_SRC) && go test -tags 'integration' github.com/trezor/blockbook/tests -run "$${CONNECTIVITY_REGEX:-TestIntegration/.*/connectivity}" -timeout 3m $(ARGS)
+	cd $(BLOCKBOOK_SRC) && go test -tags 'integration' -ldflags="$(TEST_LDFLAGS)" github.com/trezor/blockbook/tests -run "$${CONNECTIVITY_REGEX:-TestIntegration/.*/connectivity}" -timeout 3m $(ARGS)
 
 test-all: prepare-sources
-	cd $(BLOCKBOOK_SRC) && go test -tags 'unittest integration' `go list ./... | grep -v '^github.com/trezor/blockbook/contrib'` -timeout 30m $(ARGS)
+	cd $(BLOCKBOOK_SRC) && go test -tags 'unittest integration' -ldflags="$(TEST_LDFLAGS)" `go list ./... | grep -v '^github.com/trezor/blockbook/contrib'` -timeout 30m $(ARGS)
 
 # Regenerates blockbook-api.ts from the Go structs and hands it back to the mounted checkout.
 typescriptify: prepare-sources

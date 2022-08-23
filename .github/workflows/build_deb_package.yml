@@ -1,0 +1,52 @@
+name: build and push base image
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build_deb_packages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # The docker driver keeps images in the local engine. The Makefile's deb
+          # image is FROM the bin image, and docker run needs that local tag.
+          # The container driver would hide it unless every build was pushed.
+          driver: docker
+      - name: Build amd64 deb packages
+        run: make PORTABLE=1 BASE_IMAGE=debian:12 all-bitcoin_regtest
+      - name: Build arm64 deb packages
+        # all-<coin> deletes build/*.deb, so the second architecture must not use it.
+        # Drop the amd64 images first; both images carry a full RocksDB toolchain.
+        run: |
+          make clean-images
+          make PORTABLE=1 BASE_IMAGE=debian:12 PLATFORM=linux/arm64 build-images deb-bitcoin_regtest
+      - name: Release deb packages
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: bitcoin-regtest-${{ github.sha }}
+          name: Bitcoin regtest ${{ github.sha }}
+          target_commitish: ${{ github.sha }}
+          # A branch push has no tag of its own. Publish this build under its own
+          # tag, and leave the versioned release (v0.6.0 and similar) as latest.
+          make_latest: false
+          body: "Blockbook and bitcoind in regtest mode for testing (amd64 and arm64)"
+          files: |
+            ./build/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
